@@ -1,0 +1,8 @@
+{
+  "name": "MTsN 3 Jeneponto Digital Portal",
+  "description": "Portal Digital Terintegrasi Madrasah Tsanawiyah Negeri 3 Jeneponto. Menyediakan Layanan Cek Kelulusan Online, PPDB Digital, Profil Madrasah, dan Asisten Pintar AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
