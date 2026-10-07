@@ -102,22 +102,58 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"home" | "kelulusan" | "ppdb" | "guru" | "galeri">("home");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Profile, Teachers, and News DB States (loaded from Server API)
-  const [profile, setProfile] = useState<SchoolProfile>({
+  // Default Profile Structure
+  const INITIAL_DEFAULT_PROFILE: SchoolProfile = {
     schoolName: "MTsN 3 Jeneponto",
     accreditation: "Predikat A (Peringkat I Sul-Sel)",
     principalName: "Dr. H. HAMZAH, S.Ag, S.Pd, M.Pd",
     principalTitle: "Kepala Madrasah MTsN 3 Jeneponto",
     principalNip: "197109062007011025",
-    principalWelcome: "",
+    principalWelcome: "Puji syukur kehadirat Allah SWT atas limpahan rahmat-Nya sehingga kita dapat terus mendampingi putra-putri terbaik daerah dalam menimba ilmu. MTsN 3 Jeneponto hadir sebagai solusi pendidikan berstandar nasional yang mengintegrasikan kecerdasan intelektual, emosional, spiritual, serta kesiapan teknologi digital masa kini.\n\nKami berkomitmen untuk mendidik generasi muda di Jeneponto agar tidak hanya mahir dalam sains dan teknologi, namun juga kokoh dalam akidah, mulia dalam akhlak, serta hafal Al-Qur'an (Tahfidz). Predikat Akreditasi A tingkat nasional dan peringkat pertama tingkat Sulawesi Selatan membuktikan dedikasi tinggi kami secara berkelanjutan.",
     principalPhoto: "/src/assets/images/mtsn3_principal_portrait_1791344788072.jpg",
     schoolLogo: "/src/assets/images/mtsn3_school_emblem_1791344811679.jpg",
-    vision: "",
-    mission: [],
-    facilities: []
+    vision: "Terwujudnya madrasah yang Mandiri, Berprestasi, Unggul dalam IPTEK, Kokoh dalam IMTAK, berwawasan lingkungan, dan berkarakter Islami secara menyeluruh.",
+    mission: [
+      "Melaksanakan pembelajaran efektif & interaktif berbasis digital.",
+      "Menanamkan akidah lurus, penguatan akhlakul karimah, dan kecintaan ibadah.",
+      "Mengoptimalkan sarana TIK untuk kelancaran PAS Online & digitalisasi kelas.",
+      "Menumbuhkan budaya cinta kebersihan, ramah anak, dan kelestarian lingkungan."
+    ],
+    facilities: [
+      "Laboratorium Komputer Representatif khusus PAS Online.",
+      "Perpustakaan dengan koleksi buku terpadu & nyaman.",
+      "Musholla Al-Ikhlas sebagai episentrum pembinaan ibadah.",
+      "Akses Hotspot Internet berkecepatan tinggi di area kampus.",
+      "Lapangan Olahraga serbaguna rindang & aman."
+    ]
+  };
+
+  // Profile, Teachers, and News DB States (Initialized from localStorage with fallback)
+  const [profile, setProfile] = useState<SchoolProfile>(() => {
+    try {
+      const saved = localStorage.getItem("mtsn3_profile");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Gagal load profile dari localStorage:", e);
+    }
+    return INITIAL_DEFAULT_PROFILE;
   });
-  const [teachersList, setTeachersList] = useState<Teacher[]>([]);
-  const [newsList, setNewsList] = useState<NewsArticle[]>([]);
+
+  const [teachersList, setTeachersList] = useState<Teacher[]>(() => {
+    try {
+      const saved = localStorage.getItem("mtsn3_teachers");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
+
+  const [newsList, setNewsList] = useState<NewsArticle[]>(() => {
+    try {
+      const saved = localStorage.getItem("mtsn3_news");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
 
   // ADMIN STATE (CMS SYSTEM)
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -127,7 +163,13 @@ export default function App() {
 
   // Edit Profile States
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
-  const [profileForm, setProfileForm] = useState<SchoolProfile>({ ...profile });
+  const [profileForm, setProfileForm] = useState<SchoolProfile>(() => {
+    try {
+      const saved = localStorage.getItem("mtsn3_profile");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_DEFAULT_PROFILE;
+  });
 
   // Add/Delete Teacher States
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
@@ -193,7 +235,13 @@ export default function App() {
   const [ppdbSuccess, setPpdbSuccess] = useState<PPDBRegistration | null>(null);
   const [ppdbLoading, setPpdbLoading] = useState(false);
   const [ppdbError, setPpdbError] = useState("");
-  const [ppdbList, setPpdbList] = useState<PPDBRegistration[]>([]);
+  const [ppdbList, setPpdbList] = useState<PPDBRegistration[]>(() => {
+    try {
+      const saved = localStorage.getItem("mtsn3_ppdb");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
   
   // PPDB Form inputs
   const [ppdbForm, setPpdbForm] = useState({
@@ -232,21 +280,75 @@ export default function App() {
     { name: "Foto Kamad", path: "/src/assets/images/mtsn3_principal_portrait_1791344788072.jpg" }
   ];
 
-  // Fetch initial database from Express Server
+  // Fetch & synchronize database between localStorage and Express Server
   const loadDatabase = async () => {
     try {
+      // 1. Profile sync
       const pRes = await fetch("/api/profile");
-      const pData = await pRes.json();
-      setProfile(pData);
-      setProfileForm(pData);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        const localProfileStr = localStorage.getItem("mtsn3_profile");
+        const localModified = localStorage.getItem("mtsn3_profile_modified");
+        
+        if (localProfileStr && localModified === "true") {
+          const parsedLocal = JSON.parse(localProfileStr);
+          setProfile(parsedLocal);
+          setProfileForm(parsedLocal);
+          // Sync custom local changes to backend
+          fetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsedLocal)
+          }).catch(() => {});
+        } else if (pData && pData.schoolName) {
+          setProfile(pData);
+          setProfileForm(pData);
+          localStorage.setItem("mtsn3_profile", JSON.stringify(pData));
+        }
+      }
 
+      // 2. Teachers sync
       const tRes = await fetch("/api/teachers");
-      const tData = await tRes.json();
-      setTeachersList(tData);
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        const localTeachersStr = localStorage.getItem("mtsn3_teachers");
+        const localTeachersMod = localStorage.getItem("mtsn3_teachers_modified");
+        
+        if (localTeachersStr && localTeachersMod === "true") {
+          setTeachersList(JSON.parse(localTeachersStr));
+        } else if (Array.isArray(tData) && tData.length > 0) {
+          setTeachersList(tData);
+          localStorage.setItem("mtsn3_teachers", JSON.stringify(tData));
+        }
+      }
 
+      // 3. News sync
       const nRes = await fetch("/api/news");
-      const nData = await nRes.json();
-      setNewsList(nData);
+      if (nRes.ok) {
+        const nData = await nRes.json();
+        const localNewsStr = localStorage.getItem("mtsn3_news");
+        const localNewsMod = localStorage.getItem("mtsn3_news_modified");
+        
+        if (localNewsStr && localNewsMod === "true") {
+          setNewsList(JSON.parse(localNewsStr));
+        } else if (Array.isArray(nData) && nData.length > 0) {
+          setNewsList(nData);
+          localStorage.setItem("mtsn3_news", JSON.stringify(nData));
+        }
+      }
+
+      // 4. PPDB sync
+      const ppdbRes = await fetch("/api/ppdb");
+      if (ppdbRes.ok) {
+        const ppdbData = await ppdbRes.json();
+        const localPpdbStr = localStorage.getItem("mtsn3_ppdb");
+        if (localPpdbStr) {
+          setPpdbList(JSON.parse(localPpdbStr));
+        } else if (Array.isArray(ppdbData)) {
+          setPpdbList(ppdbData);
+          localStorage.setItem("mtsn3_ppdb", JSON.stringify(ppdbData));
+        }
+      }
     } catch (err) {
       console.error("Gagal sinkronisasi data dari server:", err);
     }
@@ -332,6 +434,12 @@ export default function App() {
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Save locally first so it is immediately persistent in browser
+      setProfile(profileForm);
+      localStorage.setItem("mtsn3_profile", JSON.stringify(profileForm));
+      localStorage.setItem("mtsn3_profile_modified", "true");
+      setShowEditProfileModal(false);
+
       const res = await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -340,10 +448,10 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setProfile(data.profile);
-        setShowEditProfileModal(false);
+        localStorage.setItem("mtsn3_profile", JSON.stringify(data.profile));
       }
     } catch (err) {
-      console.error("Gagal menyimpan profil:", err);
+      console.error("Gagal menyimpan profil ke server (tersimpan lokal):", err);
     }
   };
 
@@ -351,6 +459,15 @@ export default function App() {
   const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const localId = `teacher-${Date.now()}`;
+      const newTeacherObj = { ...teacherForm, id: localId };
+      const updated = [...teachersList, newTeacherObj];
+      setTeachersList(updated);
+      localStorage.setItem("mtsn3_teachers", JSON.stringify(updated));
+      localStorage.setItem("mtsn3_teachers_modified", "true");
+      setShowAddTeacherModal(false);
+      setTeacherForm({ name: "", role: "", nip: "", status: "PNS", desc: "" });
+
       const res = await fetch("/api/teachers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -358,12 +475,12 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        setTeachersList(prev => [...prev, data.teacher]);
-        setShowAddTeacherModal(false);
-        setTeacherForm({ name: "", role: "", nip: "", status: "PNS", desc: "" });
+        const serverUpdated = [...teachersList.filter(t => t.id !== localId), data.teacher];
+        setTeachersList(serverUpdated);
+        localStorage.setItem("mtsn3_teachers", JSON.stringify(serverUpdated));
       }
     } catch (err) {
-      console.error("Gagal menambah guru:", err);
+      console.error("Gagal menambah guru ke server (tersimpan lokal):", err);
     }
   };
 
@@ -371,12 +488,17 @@ export default function App() {
   const handleDeleteTeacher = async (id: string) => {
     if (!confirm("Apakah Anda yakin ingin menghapus data guru/staf ini dari direktori resmi?")) return;
     try {
+      const updated = teachersList.filter(t => t.id !== id);
+      setTeachersList(updated);
+      localStorage.setItem("mtsn3_teachers", JSON.stringify(updated));
+      localStorage.setItem("mtsn3_teachers_modified", "true");
+
       const res = await fetch(`/api/teachers/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setTeachersList(prev => prev.filter(t => t.id !== id));
+      if (!res.ok) {
+        console.warn("Server delete sync failed, deleted locally.");
       }
     } catch (err) {
-      console.error("Gagal menghapus guru:", err);
+      console.error("Gagal menghapus guru di server (terhapus lokal):", err);
     }
   };
 
@@ -399,6 +521,14 @@ export default function App() {
     if (!editingTeacherId) return;
 
     try {
+      const updated = teachersList.map(teacher => 
+        teacher.id === editingTeacherId ? { ...teacher, ...editTeacherForm } : teacher
+      );
+      setTeachersList(updated);
+      localStorage.setItem("mtsn3_teachers", JSON.stringify(updated));
+      localStorage.setItem("mtsn3_teachers_modified", "true");
+      setShowEditTeacherModal(false);
+
       const res = await fetch(`/api/teachers/${editingTeacherId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -406,14 +536,15 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        setTeachersList(prev => prev.map(teacher => teacher.id === editingTeacherId ? data.teacher : teacher));
-        setShowEditTeacherModal(false);
-        setEditingTeacherId(null);
-      } else {
-        alert("Gagal memperbarui data guru.");
+        const serverUpdated = teachersList.map(teacher => 
+          teacher.id === editingTeacherId ? data.teacher : teacher
+        );
+        setTeachersList(serverUpdated);
+        localStorage.setItem("mtsn3_teachers", JSON.stringify(serverUpdated));
       }
+      setEditingTeacherId(null);
     } catch (err) {
-      console.error("Gagal memperbarui data guru:", err);
+      console.error("Gagal memperbarui data guru di server (diperbarui lokal):", err);
     }
   };
 
@@ -421,6 +552,29 @@ export default function App() {
   const handleAddNews = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const localArticle: NewsArticle = {
+        id: `news-${Date.now()}`,
+        title: newsForm.title,
+        author: newsForm.author || "Humas MTsN 3",
+        date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+        category: newsForm.category || "Kegiatan",
+        content: newsForm.content,
+        image: newsForm.image || "/src/assets/images/mtsn3_students_classroom_1791344823640.jpg"
+      };
+
+      const updated = [localArticle, ...newsList];
+      setNewsList(updated);
+      localStorage.setItem("mtsn3_news", JSON.stringify(updated));
+      localStorage.setItem("mtsn3_news_modified", "true");
+      setShowAddNewsModal(false);
+      setNewsForm({
+        title: "",
+        author: "Humas MTsN 3",
+        category: "Kegiatan",
+        content: "",
+        image: "/src/assets/images/mtsn3_students_classroom_1791344823640.jpg"
+      });
+
       const res = await fetch("/api/news", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -428,18 +582,12 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        setNewsList(prev => [data.article, ...prev]);
-        setShowAddNewsModal(false);
-        setNewsForm({
-          title: "",
-          author: "Humas MTsN 3",
-          category: "Kegiatan",
-          content: "",
-          image: "/src/assets/images/mtsn3_students_classroom_1791344823640.jpg"
-        });
+        const serverUpdated = [data.article, ...newsList.filter(n => n.id !== localArticle.id)];
+        setNewsList(serverUpdated);
+        localStorage.setItem("mtsn3_news", JSON.stringify(serverUpdated));
       }
     } catch (err) {
-      console.error("Gagal mengunggah berita:", err);
+      console.error("Gagal mengunggah berita ke server (tersimpan lokal):", err);
     }
   };
 
@@ -447,9 +595,14 @@ export default function App() {
   const handleDeleteNews = async (id: string) => {
     if (!confirm("Hapus artikel berita ini secara permanen?")) return;
     try {
+      const updated = newsList.filter(n => n.id !== id);
+      setNewsList(updated);
+      localStorage.setItem("mtsn3_news", JSON.stringify(updated));
+      localStorage.setItem("mtsn3_news_modified", "true");
+
       const res = await fetch(`/api/news/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setNewsList(prev => prev.filter(n => n.id !== id));
+      if (!res.ok) {
+        console.warn("Server delete sync failed, deleted locally.");
       }
     } catch (err) {
       console.error("Gagal menghapus berita:", err);
@@ -460,11 +613,13 @@ export default function App() {
   const handleDeletePpdb = async (id: string) => {
     if (!confirm("Apakah Anda yakin ingin menghapus berkas pendaftar PPDB ini secara permanen dari sistem sekolah?")) return;
     try {
+      const updated = ppdbList.filter(item => item.id !== id);
+      setPpdbList(updated);
+      localStorage.setItem("mtsn3_ppdb", JSON.stringify(updated));
+
       const res = await fetch(`/api/ppdb/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setPpdbList(prev => prev.filter(item => item.id !== id));
-      } else {
-        alert("Gagal menghapus pendaftar.");
+      if (!res.ok) {
+        console.warn("Server delete PPDB failed, deleted locally.");
       }
     } catch (err) {
       console.error("Gagal menghapus berkas PPDB:", err);
@@ -512,22 +667,40 @@ export default function App() {
     setPpdbError("");
 
     try {
+      const localReg: PPDBRegistration = {
+        id: `PPDB-2026-0${ppdbList.length + 1}`,
+        fullName: ppdbForm.fullName,
+        nisn: ppdbForm.nisn,
+        originSchool: ppdbForm.originSchool,
+        email: ppdbForm.email || "-",
+        phone: ppdbForm.phone,
+        gender: ppdbForm.gender,
+        guardianName: ppdbForm.guardianName || "-",
+        guardianPhone: ppdbForm.guardianPhone || "-",
+        status: "Menunggu Verifikasi",
+        createdAt: new Date().toISOString()
+      };
+
+      const updated = [localReg, ...ppdbList];
+      setPpdbList(updated);
+      localStorage.setItem("mtsn3_ppdb", JSON.stringify(updated));
+      setPpdbSuccess(localReg);
+
       const res = await fetch("/api/ppdb", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(ppdbForm)
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Gagal melakukan pendaftaran.");
+      if (res.ok) {
+        const data = await res.json();
+        setPpdbSuccess(data.registration);
+        const serverUpdated = [data.registration, ...ppdbList.filter(r => r.id !== localReg.id)];
+        setPpdbList(serverUpdated);
+        localStorage.setItem("mtsn3_ppdb", JSON.stringify(serverUpdated));
       }
-
-      const data = await res.json();
-      setPpdbSuccess(data.registration);
-      setPpdbList(prev => [data.registration, ...prev]);
     } catch (err: any) {
-      setPpdbError(err.message || "Terjadi kesalahan koneksi.");
+      console.warn("PPDB offline fallback activated:", err);
     } finally {
       setPpdbLoading(false);
     }
